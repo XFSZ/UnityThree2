@@ -1,0 +1,507 @@
+package com.example.xfsz.myapplication;
+
+//import android.support.v7.app.AppCompatActivity;
+import  java.io.File;
+import  java.io.FileNotFoundException;
+import  java.io.FileOutputStream;
+import java.io.FilenameFilter;
+import  java.io.IOException;
+import java.io.StringWriter;
+import java.lang.reflect.Array;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
+
+import com.google.android.gms.appindexing.Action;
+import com.google.android.gms.appindexing.AppIndex;
+import com.google.android.gms.common.api.GoogleApiClient;
+import  com.unity3d.player.UnityPlayer;
+import  android.app.Activity;
+import android.app.ProgressDialog;
+import  android.content.ContentResolver;
+import  android.content.Intent;
+import  android.database.Cursor;
+import  android.graphics.Bitmap;
+import  android.graphics.BitmapFactory;
+import android.graphics.ImageFormat;
+import  android.net.Uri;
+import  android.os.Environment;
+import android.provider.ContactsContract;
+import  android.provider.MediaStore;
+import android.renderscript.Sampler;
+import  android.util.Log;
+
+import android.os.Bundle;
+import android.widget.GridView;
+import android.widget.RelativeLayout;
+import android.widget.Toast;
+import com.unity3d.player.UnityPlayerActivity;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+//import  com.xfsz.testname.Uni
+public class MainActivity extends UnityPlayerActivity {
+    ArrayList names = null;
+    ArrayList fileNames = null;
+    private static final String TAG = MainActivity.class.getSimpleName();
+    private static final int PHOTO_REQUEST_CODE = 8; //相册
+    private static final int PHOTO_REQUEST = 2;
+    private static final int PHOTO_REQUEST_CUT = 3;
+    private static final boolean DEBUG = false;
+    private String unitygameobjectName = "Image";
+    private static final int NONE = 0;
+    private ProgressDialog mProgressDialog;
+    //存储文件夹中的图片数量
+    private int mPicsSize;
+    //图片数量最多的文件夹
+    private File mImgDir;
+    //所有图片
+    private List<String> mImgs;
+    private GridView mGirdView;
+    //private  MyAdapter myAdapter;
+    //临时辅助类，防止同一个文件夹的多次扫描
+    private HashSet<String> mDirPaths = new HashSet<String>();
+    //扫描拿到所有的图片文件夹
+    private List<ImageFloder> mImageFloders = new ArrayList<ImageFloder>();
+    private RelativeLayout mBottomLy;
+    int totalCount = 0;
+    /**
+     * ATTENTION: This was auto-generated to implement the App Indexing API.
+     * See https://g.co/AppIndexing/AndroidStudio for more information.
+     */
+    private GoogleApiClient client;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        // setContentView(R.layout.activity_main);
+        // ATTENTION: This was auto-generated to implement the App Indexing API.
+        // See https://g.co/AppIndexing/AndroidStudio for more information.
+        client = new GoogleApiClient.Builder(this).addApi(AppIndex.API).build();
+    }
+
+    public List getAllImage() {
+        List listItems = new ArrayList();
+        names = new ArrayList();
+        fileNames = new ArrayList();
+        Cursor cursor = getContentResolver().query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI, null, null, null, null);
+        while (cursor.moveToNext()) {
+            //获取图片的名称
+            String name = cursor.getString(cursor.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME));
+            //获取图片的地址
+            byte[] data = cursor.getBlob(cursor.getColumnIndex(MediaStore.Images.Media.DATA));
+            names.add(name);
+            fileNames.add(new String(data, 0, data.length - 1));
+        }
+        for (int i = 0; i < names.size(); i++) {
+            Map map = new HashMap();
+            map.put("name", names.get(i));
+            map.put("fileName", fileNames.get(i));
+            Log.i(MainActivity.class.getName(), names.get(i) + "");
+            Log.i(MainActivity.class.getName(), fileNames.get(i) + "");
+            listItems.add(map);
+        }
+
+        return listItems;
+    }
+
+    public void OpenGallery() {
+        //  Intent  intent  = new Intent(Intent.ACTION_GET_CONTENT);
+        Intent intent = new Intent(Intent.ACTION_PICK, null);
+        intent.setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*");
+        startActivityForResult(intent, PHOTO_REQUEST_CODE);
+
+    }
+
+    public void SelectPhoto() {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image/*");
+        startActivityForResult(intent, PHOTO_REQUEST);
+
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode == RESULT_CANCELED) {
+            Toast.makeText(getApplication(), "没有选择图片", Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (PHOTO_REQUEST_CODE == requestCode) {
+            Toast.makeText(getApplication(), "图片挑选完成1", Toast.LENGTH_LONG).show();
+            //   if (data == null){
+            //        return;
+            //    }
+            Uri uri = data.getData();
+            String imagePath = getImagePath(uri);
+            // UnityPlayer.UnitySendMessage(unitygameobjectName,"AndroidSave",imagePath);
+
+            try {
+
+                String[] filePathColumn = {MediaStore.Images.Media.DATA};
+                Cursor cursor = getContentResolver().query(uri, filePathColumn, null, null, null);
+                cursor.moveToFirst();
+                int columnIndex = cursor.getColumnIndex(filePathColumn[0]);
+                String picturePath = cursor.getString(columnIndex);
+                cursor.close();
+                Bitmap bitmap = BitmapFactory.decodeFile(picturePath);
+                //文件路径=U3D里的Application。persistentDataPath路径
+                File destDir = new File("/mnt/sdcard/Android/data/com.example.xfsz.myapplication/fliles");
+                if (!destDir.exists()) {
+                    destDir.mkdirs();
+                }
+                //创建图片数据输出流
+                FileOutputStream bitmapOut = new FileOutputStream("/mnt/sdcard/Android/data/com.example.xfsz.myapplication/fliles/Image.png");
+                //压缩图片 参数1图片格式 参数2 压缩率 100表示不压缩 参数3 写入输出流
+                bitmap.compress(Bitmap.CompressFormat.PNG, 50, bitmapOut);
+                //将输出流刷新写入磁盘
+                bitmapOut.flush();
+                //关闭流
+                bitmapOut.close();
+                //通知U3D可以读取图片了 参数1 U3D物体名称 参数2：方法名  参数3 要传递的参数，这里传图片名称
+                UnityPlayer.UnitySendMessage(unitygameobjectName, "GetImagePath", picturePath);
+                //   UnityPlayer.UnitySendMessage(unitygameobjectName,"AndroidSave","eorror");
+                //  String imagePath = getImagePath(uri);
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            if (DEBUG) {
+                //    Log.d(TAG,imagePath);
+            }
+            //  UnityPlayer.UnitySendMessage(unitygameobjectName,"GetImagePath",imagePath);
+        }
+        if (PHOTO_REQUEST == requestCode) {
+            Toast.makeText(getApplication(), "图片挑选完成2", Toast.LENGTH_LONG).show();
+            //  data.putExtra("return-data",true);
+            CropPhoto(data.getData());
+            if (data == null) {
+                return;
+            }
+            //    Uri uri = data.getData();
+            //     String imagePath = getImagePath(uri);
+            //  try {SaveImage(data);}catch (IOException e){e.printStackTrace();}
+            if (DEBUG) {
+                //    Log.d(TAG,imagePath);
+            }
+            //调用unity中的方法 GetImagePath（imagePath）
+            //    UnityPlayer.UnitySendMessage(unitygameobjectName,"GetImagePath",imagePath);
+        }
+        if (requestCode == PHOTO_REQUEST_CUT) {
+            Toast.makeText(getApplication(), "图片裁剪完成2", Toast.LENGTH_LONG).show();
+            try {
+                SaveImage(data);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+
+        //调用unity中方法GetTakeImagePath（path）
+        // mUnityPlayer.UnitySendMessage(unitygameobjectName,"GetTakeImagePath",path);
+
+    }
+
+    public void CropPhoto(Uri uri) {
+        Intent intent = new Intent("com.android.camera.action.CROP");
+        intent.setDataAndType(uri, "image/*");
+        intent.putExtra("crop", "true");
+        intent.putExtra("aspectX", 1);
+        intent.putExtra("aspectY", 1);
+        intent.putExtra("outputX", 100);
+        intent.putExtra("outputY", 100);
+        intent.putExtra("return-data", true);
+        startActivityForResult(intent, PHOTO_REQUEST_CUT);
+    }
+
+    public void SaveImage(Intent intents) throws IOException {
+        //获取intent传过来的数据
+        //Bundle类是键值对形式，传递数据 Intent也可以传递数据，两个区别：intent是Bunble的封装
+        //Intent 主要数据传递用，bundle主要存取数据用
+        Bundle extras = intents.getExtras();
+        if (extras == null) {
+            UnityPlayer.UnitySendMessage(unitygameobjectName, "AndroidSave", "eorror");
+            return;
+        }
+        if (extras != null) {
+            //取出数据
+            Bitmap bitmap = extras.getParcelable("data");
+            //文件路径=U3D里的Application。persistentDataPath路径
+            File destDir = new File("/mnt/sdcard/Android/data/com.example.xfsz.myapplication/files");
+            if (!destDir.exists()) {
+                destDir.mkdirs();
+            }
+            //创建图片数据输出流
+            FileOutputStream bitmapOut = new FileOutputStream("/mnt/sdcard/Android/data/com.example.xfsz.myapplication/files/Image.png");
+            //压缩图片 参数1图片格式 参数2 压缩率 100表示不压缩 参数3 写入输出流
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, bitmapOut);
+            //将输出流刷新写入磁盘
+            bitmapOut.flush();
+            //关闭流
+            bitmapOut.close();
+            //通知U3D可以读取图片了 参数1 U3D物体名称 参数2：方法名  参数3 要传递的参数，这里传图片名称
+            UnityPlayer.UnitySendMessage(unitygameobjectName, "AndroidSaveHeadImageOver", "Image.png");
+        }
+
+
+    }
+
+    private String getImagePath(Uri uri) {
+        if (null == uri) return null;
+        String path = null;
+        final String scheme = uri.getScheme();
+        if (null == scheme) {
+            path = uri.getPath();
+        } else if (ContentResolver.SCHEME_FILE.equals(scheme)) {
+            path = uri.getPath();
+        } else if (ContentResolver.SCHEME_CONTENT.equals(scheme)) {
+            String[] proj = {MediaStore.Images.Media.DATA};
+            Cursor cursor = getContentResolver().query(uri, proj, null, null, null);
+            int nPhotoCulumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
+            if (null != cursor) {
+                cursor.moveToFirst();
+                path = cursor.getString(nPhotoCulumn);
+            }
+            cursor.close();
+        }
+        //  UnityPlayer.UnitySendMessage(unitygameobjectName,"GetImagePath",path);
+        return path;
+    }
+
+    private void getImages() {
+        if (!Environment.getExternalStorageState().equals(
+                Environment.MEDIA_MOUNTED)) {
+            Toast.makeText(this, "暂无外部储存", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        //显示进度条
+        mProgressDialog = ProgressDialog.show(this, null, "正在加载...");
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String firstImage = null;
+                Uri mImageUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+                Cursor mCursor = getContentResolver().query(mImageUri, null,
+                        MediaStore.Images.Media.MIME_TYPE + "=? or " + MediaStore.Images.Media.MIME_TYPE + "=?",
+                        new String[]{"image/jpeg", "image/png"}, MediaStore.Images.Media.DATE_MODIFIED);
+                Log.e("TAG", mCursor.getCount() + "");
+                while (mCursor.moveToNext()) {
+                    //获取图片的路径
+                    String path = mCursor.getString(mCursor.getColumnIndex(MediaStore.Images.Media.DATA));
+                    Log.e("TAG", path);
+                    //拿到第一张图片的路径
+                    if (firstImage == null)
+                        firstImage = path;
+                    //获取该图片的父路径名
+                    File parentFile = new File(path).getParentFile();
+                    if (parentFile == null)
+                        continue;
+                    String dirPath = parentFile.getAbsolutePath();
+                    ImageFloder imageFloder = null;
+                    //利用一个HashSet防止多次扫描同一个文件夹
+                    if (mDirPaths.contains(dirPath)) {
+                        continue;
+                    } else {
+                        mDirPaths.add(dirPath);
+                        //初始化imageFloder
+                        imageFloder = new ImageFloder();
+                        imageFloder.setDir(dirPath);
+                        imageFloder.setFirstImagePath(path);
+                    }
+                    int picSize = 0;
+                    try {
+                        picSize = parentFile.list(new FilenameFilter() {
+                            @Override
+                            public boolean accept(File dir, String filename) {
+                                if (filename.endsWith(".jpg") || filename.endsWith(".png") || filename.endsWith(".jpeg"))
+                                    return true;
+                                return false;
+                            }
+                        }).length;
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                    totalCount += picSize;
+                    imageFloder.setCount(picSize);
+                    mImageFloders.add(imageFloder);
+                    if (picSize > mPicsSize) {
+                        mPicsSize = picSize;
+                        mImgDir = parentFile;
+                    }
+                }
+                mCursor.close();
+                //扫描完成，辅助的hashSet也就可以释放内存了
+                mDirPaths = null;
+                //通知Handler扫描图片完成
+
+            }
+        }).start();
+        mImgs = Arrays.asList(mImgDir.list());
+    }
+    public  void  queryGalleryn(){
+        List<String> galleryList = new ArrayList<String>();//图片路径列表
+        List<String> imageFolderIds = new ArrayList<String>(); //包含图片的文件夹ID列表
+        File destDir = new File("/mnt/sdcard/Android/data/com.example.xfsz.myapplication/json");
+        if (!destDir.exists()) {
+            destDir.mkdirs();
+        }
+        String jsonpath = destDir + File.separator + "JsonPath.json";
+        FileOutputStream outputStream = null;
+        ContentResolver cr = getContentResolver();
+        String[] columns = {MediaStore.Images.Media.DATA, //图片的绝对路径
+                MediaStore.Images.Media.BUCKET_ID,  //直接包含图片文件 的文件夹ID，防止在不同文件夹重名
+                MediaStore.Images.Media.BUCKET_DISPLAY_NAME,//直接包含该图片文件的文件夹名
+                "COUNT(1) AS count" // 统计当前文件夹下共有多少张
+        };
+        String sortOrder = MediaStore.Images.Media.DATE_MODIFIED; //默认升序排列
+        Cursor cur = cr.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI, //MediaStore多媒体数据库中SD卡上的image数据表UI
+                columns, null, null, sortOrder);
+        try{
+            outputStream = new FileOutputStream(new File(jsonpath));
+            JSONObject root  = new JSONObject();
+            JSONArray array = new JSONArray();
+            while (cur.moveToNext()) {
+                int image_id_column = cur.getColumnIndex(MediaStore.Images.Media.DATA);
+                int bucket_id_column = cur.getColumnIndex(MediaStore.Images.Media.BUCKET_ID);
+                int bucket_name_column = cur.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME);
+                int count_column = cur.getColumnIndex("count");
+
+                String image_path = cur.getString(image_id_column);//文件路径
+                int bucket_id = cur.getInt(bucket_id_column);//所在文件夹ID
+                String bucket_name = cur.getString(bucket_name_column); //所在文件夹Name
+                int count = cur.getInt(count_column); //当前文件夹下共有多少张图片
+                //     File jsonFile = new File(destDir, "JsonPath.json");
+
+                JSONObject json = new JSONObject();
+                json.put("name",image_path);
+                array.put(json);
+                galleryList.add(image_path);
+             /*   if (count > 1) {
+                    imageFolderIds.add(String.valueOf(bucket_id));
+                } else {
+                    galleryList.add(image_path);
+                }*/
+
+            }
+            String  msg =  new  String (array.toString());
+            outputStream.write(msg.getBytes("UTF-8"));
+        }catch (Exception e){e.printStackTrace();}
+        UnityPlayer.UnitySendMessage(unitygameobjectName, "AndroidSaveHead", jsonpath);
+    }
+    public List<String> queryGallery () {
+        List<String> galleryList = new ArrayList<String>();//图片路径列表
+        List<String> imageFolderIds = new ArrayList<String>(); //包含图片的文件夹ID列表
+        File destDir = new File("/mnt/sdcard/Android/data/com.example.xfsz.myapplication/json");
+        if (!destDir.exists()) {
+            destDir.mkdirs();
+        }
+        String jsonpath = destDir + File.separator + "JsonPath.json";
+        FileOutputStream outputStream = null;
+        ContentResolver cr = getContentResolver();
+        String[] columns = {MediaStore.Images.Media.DATA, //图片的绝对路径
+                MediaStore.Images.Media.BUCKET_ID,  //直接包含图片文件 的文件夹ID，防止在不同文件夹重名
+                MediaStore.Images.Media.BUCKET_DISPLAY_NAME,//直接包含该图片文件的文件夹名
+                "COUNT(1) AS count" // 统计当前文件夹下共有多少张
+        };
+        String sortOrder = MediaStore.Images.Media.DATE_MODIFIED; //默认升序排列
+        Cursor cur = cr.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI, //MediaStore多媒体数据库中SD卡上的image数据表UI
+                columns, null, null, sortOrder);
+        try{
+            outputStream = new FileOutputStream(new File(jsonpath));
+            JSONObject root  = new JSONObject();
+            JSONArray array = new JSONArray();
+            while (cur.moveToNext()) {
+                int image_id_column = cur.getColumnIndex(MediaStore.Images.Media.DATA);
+                int bucket_id_column = cur.getColumnIndex(MediaStore.Images.Media.BUCKET_ID);
+                int bucket_name_column = cur.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME);
+                int count_column = cur.getColumnIndex("count");
+
+                String image_path = cur.getString(image_id_column);//文件路径
+                int bucket_id = cur.getInt(bucket_id_column);//所在文件夹ID
+                String bucket_name = cur.getString(bucket_name_column); //所在文件夹Name
+                int count = cur.getInt(count_column); //当前文件夹下共有多少张图片
+           //     File jsonFile = new File(destDir, "JsonPath.json");
+
+                JSONObject json = new JSONObject();
+                json.put("name",image_path);
+                array.put(json);
+                galleryList.add(image_path);
+             /*   if (count > 1) {
+                    imageFolderIds.add(String.valueOf(bucket_id));
+                } else {
+                    galleryList.add(image_path);
+                }*/
+
+            }
+            String  msg =  new  String (array.toString());
+            outputStream.write(msg.getBytes("UTF-8"));
+        }catch (Exception e){e.printStackTrace();}
+        UnityPlayer.UnitySendMessage(unitygameobjectName, "AndroidSaveHead", jsonpath);
+        return galleryList;
+
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+
+        // ATTENTION: This was auto-generated to implement the App Indexing API.
+        // See https://g.co/AppIndexing/AndroidStudio for more information.
+        client.connect();
+        Action viewAction = Action.newAction(
+                Action.TYPE_VIEW, // TODO: choose an action type.
+                "Main Page", // TODO: Define a title for the content shown.
+                // TODO: If you have web page content that matches this app activity's content,
+                // make sure this auto-generated web page URL is correct.
+                // Otherwise, set the URL to null.
+                Uri.parse("http://host/path"),
+                // TODO: Make sure this auto-generated app URL is correct.
+                Uri.parse("android-app://com.example.xfsz.myapplication/http/host/path")
+        );
+        AppIndex.AppIndexApi.start(client, viewAction);
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+
+        // ATTENTION: This was auto-generated to implement the App Indexing API.
+        // See https://g.co/AppIndexing/AndroidStudio for more information.
+        Action viewAction = Action.newAction(
+                Action.TYPE_VIEW, // TODO: choose an action type.
+                "Main Page", // TODO: Define a title for the content shown.
+                // TODO: If you have web page content that matches this app activity's content,
+                // make sure this auto-generated web page URL is correct.
+                // Otherwise, set the URL to null.
+                Uri.parse("http://host/path"),
+                // TODO: Make sure this auto-generated app URL is correct.
+                Uri.parse("android-app://com.example.xfsz.myapplication/http/host/path")
+        );
+        AppIndex.AppIndexApi.end(client, viewAction);
+        client.disconnect();
+    }
+    /*
+public  void  ShowToast(final  String msg)
+{
+    //需要在UI线程下执行
+    runOnUiThread(new   Runnable()
+    {
+        @Override
+        public  void  run()
+        {
+            Toast.makeText(getApplicationContext(),msg, Toast.LENGTH_LONG).show();
+        }
+
+    });
+}*/
+
+}

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: cf3db4a22cf10c343afd48ede3a74b9f
+timeCreated: 1495263449
+licenseType: Free
+MonoImporter:
+  serializedVersion: 2
+  defaultReferences:
+  - biao: {fileID: 2800000, guid: 6b4afadd29fcf2d4fb632b64478edb52, type: 3}
+  - random: {fileID: 2800000, guid: 9fda6255fef844746a9e4898e8b1413d, type: 3}
+  - cirlc: {fileID: 2800000, guid: 21835885e0862f84389d359a8972213c, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
